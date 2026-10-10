@@ -161,3 +161,116 @@ public class Calculator extends JFrame {
         l.setAlignmentX(Component.RIGHT_ALIGNMENT);
         l.setMaximumSize(new Dimension(Integer.MAX_VALUE, l.getPreferredSize().height + 6));
     }
+// Logika
+    private void press(String k) {
+        if (err && !k.equals("AC")) return;
+        switch (k) {
+            case "AC": cur = "0"; left = null; op = null; newEntry = true; err = false; exprText = ""; break;
+            case "+/-":
+                if (!cur.equals("0")) cur = cur.startsWith("-") ? cur.substring(1) : "-" + cur;
+                break;
+            case "%": cur = clean(new BigDecimal(cur).divide(BigDecimal.valueOf(100))); break;
+            case ".":
+                if (newEntry) { cur = "0"; newEntry = false; if (op == null) exprText = ""; }
+                if (!cur.contains(".")) cur += ".";
+                break;
+            case "=": equal(); break;
+            case DIV: case MUL: case SUB: case ADD: operator(k); break;
+            default: digit(k);
+        }
+        update();
+    }
+
+    private void digit(String d) {
+        if (newEntry) { cur = "0"; newEntry = false; if (op == null) exprText = ""; }
+        if (cur.equals("0")) cur = d;
+        else if (cur.replaceAll("[-.]", "").length() < 12) cur += d;
+    }
+
+    private void operator(String o) {
+        BigDecimal v = new BigDecimal(cur);
+        if (op != null && !newEntry) {
+            try { v = calc(left, v, op); } catch (ArithmeticException ex) { error(); return; }
+            cur = clean(v);
+        }
+        left = v;
+        op = o;
+        newEntry = true;
+        exprText = fmt(clean(left)) + " " + o;
+    }
+
+    private void equal() {
+        if (op == null) return;
+        BigDecimal b = new BigDecimal(cur);
+        try {
+            BigDecimal res = calc(left, b, op);
+            exprText = fmt(clean(left)) + " " + op + " " + fmt(clean(b));
+            history.add(new String[]{exprText, fmt(clean(res))});
+            cur = clean(res);
+            op = null;
+            newEntry = true;
+        } catch (ArithmeticException ex) { error(); }
+    }
+
+    private void error() { err = true; cur = "Error"; op = null; left = null; exprText = ""; newEntry = true; update(); }
+
+    private BigDecimal calc(BigDecimal a, BigDecimal b, String o) {
+        if (o.equals(ADD)) return a.add(b);
+        if (o.equals(SUB)) return a.subtract(b);
+        if (o.equals(MUL)) return a.multiply(b);
+        if (b.signum() == 0) throw new ArithmeticException("div0");
+        return a.divide(b, 12, RoundingMode.HALF_UP);
+    }
+
+    private static String clean(BigDecimal v) {
+        v = v.stripTrailingZeros();
+        if (v.scale() < 0) v = v.setScale(0);
+        return v.toPlainString();
+    }
+
+    private static String fmt(String s) {
+        if (s.equals("Error")) return s;
+        boolean neg = s.startsWith("-");
+        if (neg) s = s.substring(1);
+        int dot = s.indexOf('.');
+        String ip = dot >= 0 ? s.substring(0, dot) : s;
+        String fp = dot >= 0 ? s.substring(dot) : "";
+        return (neg ? "-" : "") + new DecimalFormat("#,##0").format(new BigInteger(ip)) + fp;
+    }
+
+    private void update() {
+        String t = fmt(cur);
+        resLabel.setText(t);
+        int len = t.length();
+        resLabel.setFont(new Font(FONT, Font.PLAIN, len <= 9 ? 48 : len <= 12 ? 38 : 30));
+        exprLabel.setText(exprText.isEmpty() ? " " : exprText);
+        int n = history.size();
+        for (int i = 0; i < 2; i++) {
+            int idx = n - 2 + i;
+            boolean has = idx >= 0;
+            hExpr[i].setText(has ? history.get(idx)[0] : " ");
+            hRes[i].setText(has ? history.get(idx)[1] : " ");
+        }
+    }
+
+    // Riwayat
+    private void showHistory() {
+        JDialog d = new JDialog(this, "History", true);
+        JTextArea area = new JTextArea();
+        area.setEditable(false);
+        area.setBackground(new Color(0xF7, 0xF2, 0xEC));
+        area.setForeground(DISPLAY);
+        area.setFont(new Font(FONT, Font.PLAIN, 15));
+        area.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        StringBuilder sb = new StringBuilder();
+        for (int i = history.size() - 1; i >= 0; i--)
+            sb.append(history.get(i)[0]).append("  =  ").append(history.get(i)[1]).append("\n");
+        area.setText(history.isEmpty() ? "Belum ada riwayat." : sb.toString());
+        JButton clear = new JButton("Hapus Riwayat");
+        clear.addActionListener(e -> { history.clear(); update(); d.dispose(); });
+        d.add(new JScrollPane(area), BorderLayout.CENTER);
+        d.add(clear, BorderLayout.SOUTH);
+        d.setSize(320, 360);
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
